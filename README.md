@@ -1,8 +1,8 @@
 # Light Phone Tools CLI
 
-`lpt` submits and manages Light Phone tools from the terminal instead of the dashboard.
+`lpt` submits and manages Light Phone tools from the terminal instead of the dashboard. It includes an [agent skill](#use-with-an-ai-agent), so you can also just ask Claude Code or Codex to submit your tool.
 
-> **Unofficial.** This talks to the JSON API behind dashboard.thelightphone.com, which Light has not documented. It can change without notice. Nothing here has been run against the live service yet beyond a local mock; try it on a throwaway tool first.
+> **Unofficial.** This talks to the JSON API behind dashboard.thelightphone.com, which Light has not documented. It can change without notice. Login, listing, creating tools, image upload and build submission have been used against the live service; the field names for versions and build statuses are inferred, so report anything that looks off.
 
 ## Install
 
@@ -40,10 +40,11 @@ Pick a different tool with `--tool <id|title>`; `--json` prints raw API data; `-
 
 ## Use with an AI agent
 
-`lpt` ships a skill that teaches Claude Code (and other agents that read `SKILL.md`) the submit workflow: preflight, tags, images, build, retry. Install it once:
+`lpt` ships an agent skill that teaches Claude Code and Codex (any agent that reads `SKILL.md`) the submit workflow: preflight, tags, images, build, retry. Install it once:
 
-    lpt skill install              # ~/.claude/skills/lpt
-    lpt skill install --project    # or just for the current repo
+    lpt skill install                  # Claude Code (~/.claude/skills) and Codex (~/.agents/skills)
+    lpt skill install --agent claude   # or --agent codex
+    lpt skill install --project        # into the current repo instead of your home directory
 
 Then ask your agent to "submit this tool with lpt". The skill has the agent confirm anything that changes your dashboard before it runs, and never handle your password: you sign in yourself with `lpt login`. The skill source is [`skills/lpt/SKILL.md`](skills/lpt/SKILL.md).
 

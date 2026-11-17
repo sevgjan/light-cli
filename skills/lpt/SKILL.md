@@ -11,7 +11,7 @@ Run it from inside the tool's git repo (it needs `tool/lighttool.toml` and an `o
 
 ## Ground rules
 
-- **Never ask for or handle the user's Light password.** If `lpt whoami` says not signed in, ask the user to run `! lpt login` themselves (the `!` prefix runs it in this session). Never read `~/.config/lpt/credentials.json`, never print tokens.
+- **Never ask for or handle the user's Light password.** If `lpt whoami` says not signed in, ask the user to run `lpt login` themselves in their terminal (in Claude Code, typing `! lpt login` runs it inside the session). Never read `~/.config/lpt/credentials.json`, never print tokens.
 - **`create`, `edit`, `images rm`, `submit` and `retry` change things on Light's servers.** Show the user exactly what will be sent (title, description, tags, git ref, changelog, images) and get a clear yes before running them with `-y`. Without `-y` the commands prompt, which an agent cannot answer.
 - Reads are safe any time: `whoami`, `list`, `show`, `tags`, `builds`, `images list`, `check`. Add `--json` when you need to parse the result.
 - Only one build can be active per tool, and Light reviews approved builds by hand afterwards (they email the developer).

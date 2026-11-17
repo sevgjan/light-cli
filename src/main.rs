@@ -104,11 +104,22 @@ enum Cmd {
 enum SkillCmd {
     /// Print the skill (SKILL.md) to stdout
     Print,
-    /// Install it for Claude Code: ~/.claude/skills/lpt, or ./.claude/skills/lpt with --project
+    /// Install the skill for Claude Code (~/.claude/skills) and Codex (~/.agents/skills)
     Install {
+        /// Install into the current repo (.claude/skills, .agents/skills) instead of your home directory
         #[arg(long)]
         project: bool,
+        /// Which agent to install for
+        #[arg(long, value_enum, default_value = "all")]
+        agent: Agent,
     },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum Agent {
+    All,
+    Claude,
+    Codex,
 }
 
 const SKILL: &str = include_str!("../skills/lpt/SKILL.md");
@@ -116,17 +127,27 @@ const SKILL: &str = include_str!("../skills/lpt/SKILL.md");
 fn skill(cmd: &SkillCmd) -> Result<()> {
     match cmd {
         SkillCmd::Print => print!("{SKILL}"),
-        SkillCmd::Install { project } => {
-            let base = if *project {
-                std::env::current_dir()?.join(".claude")
+        SkillCmd::Install { project, agent } => {
+            let root = if *project {
+                std::env::current_dir()?
             } else {
-                std::path::PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?).join(".claude")
+                std::path::PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?)
             };
-            let dir = base.join("skills").join("lpt");
-            std::fs::create_dir_all(&dir)?;
-            std::fs::write(dir.join("SKILL.md"), SKILL)?;
-            println!("installed {}", dir.join("SKILL.md").display());
-            println!("restart Claude Code (or start a new session) and ask it to submit a tool with lpt");
+            // Claude Code reads <root>/.claude/skills; Codex reads <root>/.agents/skills.
+            let mut targets = vec![];
+            if matches!(agent, Agent::All | Agent::Claude) {
+                targets.push(root.join(".claude"));
+            }
+            if matches!(agent, Agent::All | Agent::Codex) {
+                targets.push(root.join(".agents"));
+            }
+            for base in targets {
+                let dir = base.join("skills").join("lpt");
+                std::fs::create_dir_all(&dir)?;
+                std::fs::write(dir.join("SKILL.md"), SKILL)?;
+                println!("installed {}", dir.join("SKILL.md").display());
+            }
+            println!("start a new agent session, then ask it to submit your tool with lpt");
         }
     }
     Ok(())
