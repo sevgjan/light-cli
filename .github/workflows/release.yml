@@ -22,24 +22,26 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: macos-latest, target: aarch64-apple-darwin }
-          - { os: macos-latest, target: x86_64-apple-darwin }
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
-          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          # One macOS job builds both Mac targets: Apple Silicon runners are scarce,
+          # and a second macOS job can sit in the queue for a long time.
+          - { os: macos-latest, targets: "aarch64-apple-darwin x86_64-apple-darwin" }
+          - { os: ubuntu-latest, targets: "x86_64-unknown-linux-gnu" }
+          - { os: ubuntu-24.04-arm, targets: "aarch64-unknown-linux-gnu" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Add target
-        run: rustup target add ${{ matrix.target }}
-      - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }}
-      - name: Package and upload
+      - name: Build, package and upload
         env:
           GH_TOKEN: ${{ github.token }}
+          TARGETS: ${{ matrix.targets }}
         run: |
-          name="lpt-${GITHUB_REF_NAME}-${{ matrix.target }}"
-          mkdir "$name"
-          cp "target/${{ matrix.target }}/release/lpt" LICENSE README.md "$name/"
-          tar czf "$name.tar.gz" "$name"
-          if command -v sha256sum >/dev/null; then sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"; else shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"; fi
-          gh release upload "$GITHUB_REF_NAME" "$name.tar.gz" "$name.tar.gz.sha256"
+          for target in $TARGETS; do
+            rustup target add "$target"
+            cargo build --release --locked --target "$target"
+            name="lpt-${GITHUB_REF_NAME}-${target}"
+            mkdir "$name"
+            cp "target/${target}/release/lpt" LICENSE README.md "$name/"
+            tar czf "$name.tar.gz" "$name"
+            if command -v sha256sum >/dev/null; then sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"; else shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"; fi
+            gh release upload "$GITHUB_REF_NAME" "$name.tar.gz" "$name.tar.gz.sha256"
+          done
