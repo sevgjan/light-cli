@@ -1,0 +1,19 @@
+[package]
+name = "light-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Submit and manage Light Phone tools from the terminal"
+publish = false
+
+[[bin]]
+name = "lpt"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+rpassword = "7"
+serde_json = "1"
+toml = "0.8"
+ureq = { version = "2", features = ["json"] }
