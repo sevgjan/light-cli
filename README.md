@@ -38,6 +38,15 @@ Pick a different tool with `--tool <id|title>`; `--json` prints raw API data; `-
 
 `submit` refuses when: preflight fails, HEAD isn't the tip of a branch on origin, `versionCode` isn't higher than the last version, or a build is still running. `--force` overrides the first three.
 
+## Use with an AI agent
+
+`lpt` ships a skill that teaches Claude Code (and other agents that read `SKILL.md`) the submit workflow: preflight, tags, images, build, retry. Install it once:
+
+    lpt skill install              # ~/.claude/skills/lpt
+    lpt skill install --project    # or just for the current repo
+
+Then ask your agent to "submit this tool with lpt". The skill has the agent confirm anything that changes your dashboard before it runs, and never handle your password: you sign in yourself with `lpt login`. The skill source is [`skills/lpt/SKILL.md`](skills/lpt/SKILL.md).
+
 ## Auth
 
 The dashboard has no OAuth or API keys, so login is email and password. Only the returned token is stored, in `~/.config/lpt/credentials.json` (mode 0600). `LIGHT_TOKEN` overrides it; `LIGHT_EMAIL` and `LIGHT_PASSWORD` allow non-interactive login. `logout` revokes the token server-side.

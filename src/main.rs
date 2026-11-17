@@ -66,6 +66,11 @@ enum Cmd {
     },
     /// Run the local preflight checks without submitting
     Check,
+    /// Agent skill: teach Claude Code (and other agents) how to use lpt
+    Skill {
+        #[command(subcommand)]
+        cmd: SkillCmd,
+    },
     /// Submit HEAD for a build
     Submit {
         /// Changelog (default: last commit subject)
@@ -96,6 +101,38 @@ enum Cmd {
 }
 
 #[derive(Subcommand)]
+enum SkillCmd {
+    /// Print the skill (SKILL.md) to stdout
+    Print,
+    /// Install it for Claude Code: ~/.claude/skills/lpt, or ./.claude/skills/lpt with --project
+    Install {
+        #[arg(long)]
+        project: bool,
+    },
+}
+
+const SKILL: &str = include_str!("../skills/lpt/SKILL.md");
+
+fn skill(cmd: &SkillCmd) -> Result<()> {
+    match cmd {
+        SkillCmd::Print => print!("{SKILL}"),
+        SkillCmd::Install { project } => {
+            let base = if *project {
+                std::env::current_dir()?.join(".claude")
+            } else {
+                std::path::PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?).join(".claude")
+            };
+            let dir = base.join("skills").join("lpt");
+            std::fs::create_dir_all(&dir)?;
+            std::fs::write(dir.join("SKILL.md"), SKILL)?;
+            println!("installed {}", dir.join("SKILL.md").display());
+            println!("restart Claude Code (or start a new session) and ask it to submit a tool with lpt");
+        }
+    }
+    Ok(())
+}
+
+#[derive(Subcommand)]
 enum ImagesCmd {
     List,
     /// Upload PNG/JPEG/WebP files
@@ -116,6 +153,7 @@ fn run() -> Result<()> {
     match &cli.cmd {
         Cmd::Login => return login(),
         Cmd::Logout => return logout(),
+        Cmd::Skill { cmd } => return skill(cmd),
         Cmd::Check => {
             let ok = print_report(&Project::find()?, true)?;
             return if ok { Ok(()) } else { Err(anyhow!("preflight failed")) };
@@ -150,7 +188,7 @@ fn run() -> Result<()> {
         Cmd::Create { title, description, tags } => create(&c, &cli, title, description, tags),
         Cmd::Edit { title, description, tags } => edit(&c, &cli, title, description, tags),
         Cmd::Images { cmd } => images(&c, &cli, cmd),
-        Cmd::Check => unreachable!(),
+        Cmd::Check | Cmd::Skill { .. } => unreachable!(),
         Cmd::Submit { message, git_ref, wait, force } => submit(&c, &cli, message, git_ref, *wait, *force),
         Cmd::Builds { build } => builds(&c, &cli, build.as_deref()),
         Cmd::Wait => {
