@@ -33,7 +33,7 @@ impl Res {
     /// First attribute among `keys` rendered as a string.
     pub fn get(&self, keys: &[&str]) -> Option<String> {
         keys.iter().find_map(|k| match self.attrs.get(*k)? {
-            Value::String(s) if !s.is_empty() => Some(s.clone()),
+            Value::String(s) if !s.is_empty() => Some(clean(s)),
             Value::Number(n) => Some(n.to_string()),
             Value::Bool(b) => Some(b.to_string()),
             _ => None,
@@ -60,6 +60,10 @@ pub fn resources(v: &Value) -> Vec<Res> {
 impl Client {
     pub fn new(token: Option<String>) -> Client {
         let base = std::env::var("LIGHT_API_URL").unwrap_or_else(|_| DEFAULT_BASE.into());
+        if !secure_url(&base) {
+            eprintln!("error: LIGHT_API_URL must be https (http is only allowed for localhost)");
+            std::process::exit(1);
+        }
         let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(60))
             .user_agent(concat!("light-cli/", env!("CARGO_PKG_VERSION")))
@@ -189,6 +193,9 @@ impl Client {
         let v = self.request("POST", &format!("/third_party_tools/{tool}/images"), Some(body))?;
         let attrs = &v["data"]["attributes"];
         let put = attrs["presigned_url"].as_str().ok_or_else(|| anyhow!("no presigned_url in response"))?;
+        if !secure_url(put) {
+            bail!("refusing to upload to a non-https URL");
+        }
         let token = attrs["upload_token"].as_str().ok_or_else(|| anyhow!("no upload_token in response"))?;
         self.agent
             .put(put)
@@ -213,11 +220,27 @@ impl Client {
 
     /// Plain download (presigned URL, no auth header).
     pub fn download(&self, url: &str) -> Result<Vec<u8>> {
-        let r = self.agent.get(url).call().map_err(|e| anyhow!("download failed: {e}"))?;
+        if !secure_url(url) {
+            bail!("refusing to download from a non-https URL");
+        }
+        let r = self.agent.get(url).call().map_err(|e| match e {
+            ureq::Error::Status(code, _) => anyhow!("download failed ({code})"),
+            ureq::Error::Transport(t) => anyhow!("download failed: {}", t.kind()),
+        })?;
         let mut buf = Vec::new();
         std::io::Read::read_to_end(&mut r.into_reader(), &mut buf)?;
         Ok(buf)
     }
+}
+
+/// https only; plain http is tolerated for localhost (tests against a mock).
+fn secure_url(u: &str) -> bool {
+    u.starts_with("https://") || u.starts_with("http://127.0.0.1") || u.starts_with("http://localhost")
+}
+
+/// Strip control characters (terminal escape sequences) from server-supplied text.
+pub fn clean(s: &str) -> String {
+    s.chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').collect()
 }
 
 fn detail(body: &str) -> String {
@@ -230,5 +253,5 @@ fn detail(body: &str) -> String {
                 .collect()
         })
         .unwrap_or_default();
-    if msgs.is_empty() { String::new() } else { format!(": {}", msgs.join("; ")) }
+    if msgs.is_empty() { String::new() } else { format!(": {}", clean(&msgs.join("; "))) }
 }

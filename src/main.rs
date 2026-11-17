@@ -307,8 +307,8 @@ fn builds(c: &Client, cli: &Cli, which: Option<&str>) -> Result<()> {
 fn print_error(b: &Res) {
     match b.attrs.get("error") {
         None | Some(Value::Null) => {}
-        Some(Value::String(s)) => println!("\n{s}"),
-        Some(v) => println!("\n{}", serde_json::to_string_pretty(v).unwrap_or_default()),
+        Some(Value::String(s)) => println!("\n{}", api::clean(s)),
+        Some(v) => println!("\n{}", api::clean(&serde_json::to_string_pretty(v).unwrap_or_default())),
     }
 }
 
@@ -575,7 +575,8 @@ fn download(c: &Client, cli: &Cli, build: Option<&str>, output: Option<&str>) ->
         None => c.builds(&t.id)?.into_iter().filter(|b| is_ok(&b.or_dash(&["status"]))).max_by_key(|b| b.get(&["inserted_at"])).context("no successful build yet")?.id,
     };
     let bytes = c.download(&c.apk_url(&t.id, &id)?)?;
-    let out = output.map(String::from).unwrap_or_else(|| format!("{}-{id}.apk", t.or_dash(&["title"]).to_lowercase().replace(' ', "-")));
+    let safe = |s: &str| -> String { s.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).collect() };
+    let out = output.map(String::from).unwrap_or_else(|| format!("{}-{}.apk", safe(&t.or_dash(&["title"])), safe(&id)));
     std::fs::write(&out, &bytes)?;
     println!("saved {out} ({} KB)", bytes.len() / 1024);
     Ok(())

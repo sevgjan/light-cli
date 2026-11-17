@@ -1,6 +1,6 @@
-# lpt
+# Light Phone Tools CLI
 
-Submit and manage Light Phone tools from the terminal instead of the dashboard.
+`lpt` submits and manages Light Phone tools from the terminal instead of the dashboard.
 
 > **Unofficial.** This talks to the JSON API behind dashboard.thelightphone.com, which Light has not documented. It can change without notice. Nothing here has been run against the live service yet beyond a local mock; try it on a throwaway tool first.
 
