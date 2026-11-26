@@ -26,7 +26,7 @@ Prebuilt binaries for macOS and Linux are on the [releases page](https://github.
 
 In a tool repo (needs `tool/lighttool.toml`, an `origin` remote on GitHub):
 
-    lpt check                 # local preflight, no login needed
+    lpt check                 # preflight; when signed in, also versionCode vs Light's latest build
     lpt create --tag utilities
     lpt images add shot1.png shot2.png
     lpt submit --wait         # preflight, confirm, build, poll
@@ -36,7 +36,7 @@ In a tool repo (needs `tool/lighttool.toml`, an `origin` remote on GitHub):
 
 Pick a different tool with `--tool <id|title>`; `--json` prints raw API data; `-y` skips prompts.
 
-`submit` refuses when: preflight fails, HEAD isn't the tip of a branch on origin, `versionCode` isn't higher than the last version, or a build is still running. `--force` overrides the first three.
+`submit` refuses when: preflight fails, HEAD isn't the tip of a branch on origin, `versionCode` isn't higher than Light's latest build (versions and successful builds, published or not), or a build is still running. `--force` overrides the first three.
 
 ## Use with an AI agent
 

@@ -5,7 +5,7 @@ mod project;
 use anyhow::{anyhow, bail, Context, Result};
 use api::{Client, Res};
 use clap::{Parser, Subcommand};
-use project::{norm_repo, Project};
+use project::{norm_repo, Project, Report};
 use serde_json::{json, Value};
 use std::io::{BufRead, IsTerminal, Write};
 use std::time::{Duration, Instant};
@@ -176,7 +176,8 @@ fn run() -> Result<()> {
         Cmd::Logout => return logout(),
         Cmd::Skill { cmd } => return skill(cmd),
         Cmd::Check => {
-            let ok = print_report(&Project::find()?, true)?;
+            let p = Project::find()?;
+            let ok = print_report(&p, true, check_version_code(&p, &cli))?;
             return if ok { Ok(()) } else { Err(anyhow!("preflight failed")) };
         }
         _ => {}
@@ -326,7 +327,7 @@ fn show(c: &Client, cli: &Cli) -> Result<()> {
     println!("images:  {}{}", images.len(), if images.is_empty() { "  (at least one is required for approval)" } else { "" });
     println!("\nVersions");
     table(&["ID", "VERSION", "CODE", "STATUS", "CHANGELOG"], versions.iter().map(|v| vec![
-        v.id.clone(), v.or_dash(&["version_name", "name", "version"]), v.or_dash(&["version_code"]), v.or_dash(&["status"]), v.or_dash(&["description"]),
+        v.id.clone(), v.or_dash(&["version_name", "name", "version"]), v.or_dash(&["version_number", "version_code"]), v.or_dash(&["status"]), v.or_dash(&["description"]),
     ]).collect());
     println!("\nBuilds");
     print_builds(&builds);
@@ -371,8 +372,40 @@ fn print_error(b: &Res) {
     }
 }
 
+/// The version's versionCode: `version_number` on versions, `version_code` on builds.
 fn ver_code(v: &Res) -> i64 {
-    v.get(&["version_code"]).and_then(|s| s.parse().ok()).unwrap_or(-1)
+    v.get(&["version_number", "version_code"]).and_then(|s| s.parse().ok()).unwrap_or(-1)
+}
+
+/// The highest versionCode Light has built for this tool. The builder's preflight rejects any
+/// submission at or below it (`version_conflict`), even while no version is published.
+fn last_version_code(c: &Client, tool: &str) -> Result<Option<i64>> {
+    let versions = c.versions(tool)?;
+    let builds = c.builds(tool)?;
+    let built = builds.iter().filter(|b| is_ok(&b.or_dash(&["status"])));
+    Ok(versions.iter().chain(built).map(ver_code).max().filter(|v| *v >= 0))
+}
+
+/// `lpt check`'s online part: compare versionCode with Light's latest build when signed in.
+fn check_version_code(p: &Project, cli: &Cli) -> Report {
+    let mut r = Report { errors: vec![], warnings: vec![] };
+    let Ok(m) = p.manifest() else { return r };
+    let Some((token, _)) = auth::load() else {
+        r.warnings.push("not signed in: versionCode not checked against Light's builds (`lpt login`)".into());
+        return r;
+    };
+    let c = Client::new(Some(token));
+    // Not registered yet: any versionCode is fine.
+    let Ok(tool) = resolve_tool(&c, cli) else { return r };
+    match last_version_code(&c, &tool.id) {
+        Ok(Some(prev)) if m.version_code <= prev => r.errors.push(format!(
+            "versionCode {} must be higher than Light's latest build ({prev}): bump versionCode (and versionName) in tool/lighttool.toml",
+            m.version_code
+        )),
+        Ok(_) => {}
+        Err(e) => r.warnings.push(format!("could not check versionCode against Light: {e:#}")),
+    }
+    r
 }
 
 fn tag_ids(c: &Client, names: &[String]) -> Result<Vec<String>> {
@@ -506,8 +539,10 @@ fn latest_sdk() -> Option<String> {
     r.into_string().ok()?.lines().find_map(|l| l.strip_prefix("sdkVersion=").map(|v| v.trim().to_string()))
 }
 
-fn print_report(p: &Project, verbose: bool) -> Result<bool> {
-    let r = p.check(latest_sdk().as_deref());
+fn print_report(p: &Project, verbose: bool, extra: Report) -> Result<bool> {
+    let mut r = p.check(latest_sdk().as_deref());
+    r.warnings.extend(extra.warnings);
+    r.errors.extend(extra.errors);
     for w in &r.warnings { println!("  warn  {w}"); }
     for e in &r.errors { println!("  FAIL  {e}"); }
     if verbose && r.errors.is_empty() {
@@ -520,7 +555,7 @@ fn print_report(p: &Project, verbose: bool) -> Result<bool> {
 fn submit(c: &Client, cli: &Cli, message: &Option<String>, git_ref: &Option<String>, wait: bool, force: bool) -> Result<()> {
     let p = Project::find()?;
     println!("Preflight");
-    if !print_report(&p, true)? && !force {
+    if !print_report(&p, true, Report { errors: vec![], warnings: vec![] })? && !force {
         bail!("fix the failures above (or --force)");
     }
     let m = p.manifest()?;
@@ -536,10 +571,9 @@ fn submit(c: &Client, cli: &Cli, message: &Option<String>, git_ref: &Option<Stri
         }
     }
     let tool = resolve_tool(c, cli)?;
-    let versions = c.versions(&tool.id)?;
-    if let Some(prev) = versions.iter().map(ver_code).max().filter(|v| *v >= 0) {
+    if let Some(prev) = last_version_code(c, &tool.id)? {
         if m.version_code <= prev && !force {
-            bail!("versionCode {} must be higher than the last version ({prev}): bump it in tool/lighttool.toml", m.version_code);
+            bail!("versionCode {} must be higher than Light's latest build ({prev}): bump versionCode (and versionName) in tool/lighttool.toml", m.version_code);
         }
     }
     let existing = c.builds(&tool.id)?;
